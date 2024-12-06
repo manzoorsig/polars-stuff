@@ -1,0 +1,2 @@
+use POLARIS_DW;
+delete from CUSTOMER_DIMENSION;
