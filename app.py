@@ -338,10 +338,11 @@ def read_from_csv():
 def main():
     credentials, project = google.auth.default()
     print(f"gcp project: {project}")
-    df = read_customers_from_bq()
-    write_customers_to_dw(df)
-    df1 = read_applications_without_branches_from_bq()
-    write_applications_without_branches_to_dw(df1)
+    #df = read_customers_from_bq()
+    #write_customers_to_dw(df)
+    #df1 = read_applications_without_branches_from_bq()
+    #write_applications_without_branches_to_dw(df1)
+    scandf = read_scans_from_bq()
 
 if __name__ == "__main__":
     main()
