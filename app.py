@@ -343,6 +343,6 @@ def main():
     #df1 = read_applications_without_branches_from_bq()
     #write_applications_without_branches_to_dw(df1)
     scandf = read_scans_from_bq()
-
+    print(scandf)
 if __name__ == "__main__":
     main()
