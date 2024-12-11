@@ -6,13 +6,7 @@ from sqlalchemy import create_engine
 from datetime import datetime
 
 
-def main():
- credentials, project = google.auth.default()
- print(f"gcp project: {project}")
- #df = read_customers_from_bq()
- #write_customers_to_dw(df)
- df = read_applications_without_branches_from_bq()
- write_applications_without_branches_to_dw(df)
+
 
 
 
@@ -199,7 +193,7 @@ def read_applications_without_branches_from_bq():
                     
             FROM `gcp-sig-datalake-staging.stg_sink_data.portfolio_service_application` as app
             JOIN `gcp-sig-datalake-staging.stg_sink_data.portfolio_service_project` as proj on app.organization_id = proj.organization_id and app.id = proj.application_id
-            LIMIT 10000"""
+            LIMIT 60000"""
   
     )
     query_job = client.query(QUERY)  # API request
@@ -297,7 +291,13 @@ def read_from_csv():
     print(testdf3) 
     
 
-
+def main():
+    credentials, project = google.auth.default()
+    print(f"gcp project: {project}")
+    df = read_customers_from_bq()
+    write_customers_to_dw(df)
+    df1 = read_applications_without_branches_from_bq()
+    write_applications_without_branches_to_dw(df1)
 
 if __name__ == "__main__":
     main()

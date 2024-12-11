@@ -1,0 +1,5 @@
+google-cloud-bigquery
+google-cloud-bigquery-storage
+polars
+mysql-connector-python
+sqlalchemy
