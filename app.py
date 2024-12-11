@@ -163,7 +163,7 @@ def write_applications_with_branches_to_dw(bqdf):
     engine = create_engine(mysql_uri)
 
     result.write_database(
-          table_name="APPLICATION_DIMENSION",
+          table_name="APPLICATION_WITH_BRANCHES_DIMENSION",
           connection=engine,
           if_table_exists="append"
 
@@ -171,7 +171,7 @@ def write_applications_with_branches_to_dw(bqdf):
 
     print(f"number of records in result: {result.shape[0]}")
 
-    records = pl.read_database("SELECT count(*) as count FROM APPLICATION_DIMENSION", connection=engine)
+    records = pl.read_database("SELECT count(*) as count FROM APPLICATION_WITH_BRANCHES_DIMENSION", connection=engine)
 
     print(f"number of records in db: {records['count'][0]}")
 
@@ -269,6 +269,50 @@ def write_applications_without_branches_to_dw(bqdf):
 
     print(f"number of records in db: {records['count'][0]}")
 
+
+
+def read_scans_from_bq():
+    
+    client = bigquery.Client()
+
+    # Perform a query.
+    QUERY = (
+           """SELECT
+                    id,
+                    tenant_id,
+                    application_id,
+                    project_id,
+                    branch_id,
+                    entitlement_id,
+                    subscription_id,
+                    catalog_id,
+                    test_short_id,
+                    stream_id,
+                    scan_id,
+                    scan_mode,
+                    test_mode,
+                    tool,
+                    assessment_type,
+                    workflow_type,
+                    state,
+                    triage,
+                    is_default_branch,
+                    is_deleted,
+                    start_date,
+                    created_date,
+                    updated_date
+            FROM `gcp-sig-datalake-staging.stg_sink_data.test_manager_test` 
+            LIMIT 60000"""
+  
+    )
+    query_job = client.query(QUERY)  # API request
+    rows = query_job.result()  # Waits for query to finish
+
+    df = pl.from_arrow(rows.to_arrow())
+    print(df)
+    print(f"number of records read: {df.shape[0]}")
+
+    return df
 
 
 def read_from_csv():

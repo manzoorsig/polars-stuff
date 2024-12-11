@@ -89,3 +89,34 @@ SELECT app.organization_id as organization_id,app.id as application_id,
 
 
 
+SELECT
+  
+  id,
+  tenant_id,
+  application_id,
+  project_id,
+  branch_id,
+  entitlement_id,
+  subscription_id,
+  catalog_id,
+  test_short_id,
+  stream_id,
+  scan_id,
+  scan_mode,
+  test_mode,
+  tool,
+  assessment_type,
+  workflow_type,
+  state,
+  triage,
+  is_default_branch,
+  is_deleted,
+  start_date,
+  created_date,
+  updated_date
+
+
+FROM `gcp-sig-datalake-staging.stg_sink_data.test_manager_test` 
+
+
+
