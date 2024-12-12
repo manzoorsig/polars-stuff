@@ -315,6 +315,29 @@ def read_scans_from_bq():
     return df
 
 
+
+
+def read_customer_dim_from_dw():
+
+     # Read database credentials from environment variables
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
+    db_host = os.getenv("DB_HOST")
+    db_name = os.getenv("DB_NAME")
+
+    mysql_uri = f"mysql+mysqlconnector://{db_user}:{db_password}@{db_host}/{db_name}"
+    engine = create_engine(mysql_uri)
+
+    customers = pl.read_database("SELECT * FROM CUSTOMER_DIMENSION", connection=engine)
+
+    print(f"number of customers in dw: {customers.shape[0]}")
+
+    return customers
+
+
+def write_scans_to_dw(bqdf):
+
+
 def read_from_csv():
     
     testdf = pl.read_csv(source='./source-data/data-1732902681765.csv',has_header=True, infer_schema=True)
@@ -343,6 +366,14 @@ def main():
     #df1 = read_applications_without_branches_from_bq()
     #write_applications_without_branches_to_dw(df1)
     scandf = read_scans_from_bq()
+    
     print(scandf)
+
+
+
+
+
+
+
 if __name__ == "__main__":
     main()
