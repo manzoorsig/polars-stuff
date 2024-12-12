@@ -8,6 +8,12 @@ from datetime import datetime
 
 
 
+def get_connection_string():
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST")
+        db_name = os.getenv("DB_NAME")
+        return f"mysql+mysqlconnector://{db_user}:{db_password}@{db_host}/{db_name}"
 
 
 def read_customers_from_bq():
@@ -52,13 +58,7 @@ def write_customers_to_dw(bqdf):
         pl.lit(datetime.now()).alias("update_datetime")
     ])
 
-     # Read database credentials from environment variables
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_name = os.getenv("DB_NAME")
-
-    mysql_uri = f"mysql+mysqlconnector://{db_user}:{db_password}@{db_host}/{db_name}"
+    mysql_uri = get_connection_string()
     engine = create_engine(mysql_uri)
 
     result.write_database(
@@ -153,13 +153,7 @@ def write_applications_with_branches_to_dw(bqdf):
     print(result.columns)
     print(result.head(5)) 
 
-     # Read database credentials from environment variables
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_name = os.getenv("DB_NAME")
-
-    mysql_uri = f"mysql+mysqlconnector://{db_user}:{db_password}@{db_host}/{db_name}"
+    mysql_uri = get_connection_string()
     engine = create_engine(mysql_uri)
 
     result.write_database(
@@ -225,9 +219,9 @@ def write_applications_without_branches_to_dw(bqdf):
                  pl.col("project_created_at"),
                  pl.col("project_updated_at"),
                  pl.col("project_in_trash"),
-                 pl.col("project_state"),
-                 pl.col("project_entry_point_url"),
-                 )
+                 pl.col("project_state").str.slice(0,length=255).alias("project_state"),
+                 pl.col("project_entry_point_url").str.slice(0,length=255).alias("project_entry_point_url"),
+            )
    
     print(result.columns)
     print(result.head(5))
@@ -247,13 +241,7 @@ def write_applications_without_branches_to_dw(bqdf):
     print(result.columns)
     print(result.head(5)) 
 
-     # Read database credentials from environment variables
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_name = os.getenv("DB_NAME")
-
-    mysql_uri = f"mysql+mysqlconnector://{db_user}:{db_password}@{db_host}/{db_name}"
+    mysql_uri = get_connection_string()
     engine = create_engine(mysql_uri)
 
     result.write_database(
@@ -278,31 +266,33 @@ def read_scans_from_bq():
     # Perform a query.
     QUERY = (
            """SELECT
-                    id,
-                    tenant_id,
-                    application_id,
-                    project_id,
-                    branch_id,
-                    entitlement_id,
-                    subscription_id,
-                    catalog_id,
-                    test_short_id,
-                    stream_id,
-                    scan_id,
-                    scan_mode,
-                    test_mode,
-                    tool,
-                    assessment_type,
-                    workflow_type,
-                    state,
-                    triage,
-                    is_default_branch,
-                    is_deleted,
-                    start_date,
-                    created_date,
-                    updated_date
+                    ID as TEST_ID,
+                    tenant_id as ORGANIZATION_ID,
+                    APPLICATION_ID,
+                    PROJECT_ID,
+                    BRANCH_ID,
+                    ENTITLEMENT_ID,
+                    SUBSCRIPTION_ID,
+                    CATALOG_ID,
+                    TEST_SHORT_ID,
+                    STREAM_ID,
+                    SCAN_ID,
+                    SCAN_MODE,
+                    TEST_MODE,
+                    TOOL as TOOL_NAME,
+                    ASSESSMENT_TYPE,
+                    WORKFLOW_TYPE,
+                    state as SCAN_STATE,
+                    TRIAGE,
+                    IS_DEFAULT_BRANCH,
+                    IS_DELETED,
+                    START_DATE,
+                    CREATED_DATE,
+                    UPDATED_DATE
             FROM `gcp-sig-datalake-staging.stg_sink_data.test_manager_test` 
-            LIMIT 60000"""
+            WHERE STREAM_ID IS NOT NULL AND SCAN_ID IS NOT NULL AND TOOL IS NOT NULL
+            AND ( STATE = 'COMPLETED' OR STATE = 'FAILED')
+            LIMIT 40000"""
   
     )
     query_job = client.query(QUERY)  # API request
@@ -319,13 +309,7 @@ def read_scans_from_bq():
 
 def read_customer_dim_from_dw():
 
-     # Read database credentials from environment variables
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_name = os.getenv("DB_NAME")
-
-    mysql_uri = f"mysql+mysqlconnector://{db_user}:{db_password}@{db_host}/{db_name}"
+    mysql_uri = get_connection_string()
     engine = create_engine(mysql_uri)
 
     customers = pl.read_database("SELECT * FROM CUSTOMER_DIMENSION", connection=engine)
@@ -335,7 +319,98 @@ def read_customer_dim_from_dw():
     return customers
 
 
-def write_scans_to_dw(bqdf):
+def read_application_dim_from_dw():
+
+        mysql_uri = get_connection_string()
+        engine = create_engine(mysql_uri)
+    
+        applications = pl.read_database("SELECT * FROM APPLICATION_DIMENSION", connection=engine)
+    
+        print(f"number of applications in dw: {applications.shape[0]}")
+    
+        return applications
+
+
+
+def write_scans_to_dw():
+
+     customers = read_customer_dim_from_dw()
+     print(f"customer columns: {customers.columns}")
+     applications = read_application_dim_from_dw()
+     print(f"application columns: {applications.columns}")
+     scans = read_scans_from_bq()
+     print(f"scans columns: {scans.columns}")
+     
+
+     result = scans.join(customers,  on="ORGANIZATION_ID", how="inner").join(applications, on=["ORGANIZATION_ID","APPLICATION_ID","PROJECT_ID"], how="inner")
+     print(f"result columns: {result.columns}")
+     print(result.head(5))
+     print(result.shape[0])
+
+     scans_to_write = map_scans_to_scans_fact(result)
+     print(f"scans_to_write columns: {scans_to_write.columns}")
+     print(f"writing scans to dw: {scans_to_write.shape[0]}")
+
+     mysql_uri = get_connection_string()
+     engine = create_engine(mysql_uri)
+
+     scans_to_write.write_database(
+          table_name="SCAN_FACT",
+          connection=engine,
+          if_table_exists="append"
+
+    )  
+
+
+def map_scans_to_scans_fact(scans):
+     
+     result = scans.select(
+                    pl.col("TEST_ID"),
+                    pl.col("ID").alias("CUSTOMER_DIM_ID"),
+                    pl.col("ID_right").alias("APPLICATION_DIM_ID"),
+                    pl.col("ORGANIZATION_ID"),
+                    pl.col("APPLICATION_ID"),
+                    pl.col("PROJECT_ID"),
+                    pl.col("BRANCH_ID"),
+                    pl.col("ENTITLEMENT_ID"),
+                    pl.col("SUBSCRIPTION_ID"),
+                    pl.col("CATALOG_ID"),
+                    pl.col("TEST_SHORT_ID").str.slice(0,length=7).alias("TEST_SHORT_ID"),
+                    pl.col("STREAM_ID"),
+                    pl.col("SCAN_ID"),
+                    pl.col("SCAN_MODE"),
+                    pl.col("TEST_MODE"),
+                    pl.col("TOOL_NAME"),
+                    pl.col("ASSESSMENT_TYPE"),
+                    pl.col("WORKFLOW_TYPE"),
+                    pl.col("SCAN_STATE"),
+                    pl.col("TRIAGE"),
+                    pl.col("IS_DEFAULT_BRANCH"),
+                    pl.col("IS_DELETED"),
+                    pl.col("START_DATE"),
+                    pl.col("CREATED_AT"),
+                    pl.col("UPDATED_AT")
+
+              )
+     
+     result = result.with_columns([
+        pl.lit(datetime.now()).alias("CREATE_DATETIME"),
+        pl.lit(datetime.now()).alias("UPDATE_DATETIME")
+    ])
+
+    # Drop columns that are not needed in the database
+    # result = result.drop(['ID', 'CUSTOMER_NAME', 'TENANT_SHORT_ID', 
+    #                       'STATE', 'IS_DELETED', 'CREATED_AT', 'UPDATED_AT', 
+                           #'CREATE_DATETIME', 'UPDATE_DATETIME', 
+    #                       'ID_right', 'APPLICATION_NAME', 
+    #                       'APPLICATION_DESCRIPTION', 'IS_APPLICATION_DELETED', 'APPLICATION_CREATED_AT',
+    #                        'APPLICATION_UPDATED_AT', 'PROJECT_NAME', 'PROJECT_DESCRIPTION', 'IS_PROJECT_DELETED',
+    #                        'PROJECT_CREATED_AT', 'PROJECT_UPDATED_AT', 'PROJECT_STATE', 'PROJECT_ENTRY_POINT_URL',
+    #                        'CREATE_DATETIME_right', 'UPDATE_DATETIME_right'])
+     print("after mapping columns")
+     print(result.head(5))
+     return result
+
 
 
 def read_from_csv():
@@ -344,8 +419,8 @@ def read_from_csv():
     print(testdf)
 
     result = testdf.select(
-    pl.col("start_date").alias("start_date_str"),
-    pl.col("start_date").str.to_datetime("%Y-%m-%d %H:%M:%S%#z"),
+        pl.col("start_date").alias("start_date_str"),
+        pl.col("start_date").str.to_datetime("%Y-%m-%d %H:%M:%S%#z"),
     )
    
     print(result)
@@ -365,9 +440,9 @@ def main():
     #write_customers_to_dw(df)
     #df1 = read_applications_without_branches_from_bq()
     #write_applications_without_branches_to_dw(df1)
-    scandf = read_scans_from_bq()
+    write_scans_to_dw()
     
-    print(scandf)
+    print("done")
 
 
 
