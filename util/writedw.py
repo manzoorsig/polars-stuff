@@ -92,28 +92,13 @@ def write_applications_with_branches_to_dw(bqdf):
         pl.lit(datetime.now()).alias("create_datetime"),
         pl.lit(datetime.now()).alias("update_datetime")
     ])
-
     # Drop columns that are not needed in the database
-    result = result.drop(["application_in_trash", "project_in_trash", "branch_in_trash","is_default"])
+    result = result.drop(["application_in_trash", "project_in_trash", "branch_in_trash", "is_default"])
 
     print(result.columns)
-    print(result.head(5)) 
+    print(result.head(5))
 
-    mysql_uri = get_connection_string()
-    engine = create_engine(mysql_uri)
-
-    result.write_database(
-          table_name="APPLICATION_WITH_BRANCHES_DIMENSION",
-          connection=engine,
-          if_table_exists="append"
-
-    )  
-
-    print(f"number of records in result: {result.shape[0]}")
-
-    records = pl.read_database("SELECT count(*) as count FROM APPLICATION_WITH_BRANCHES_DIMENSION", connection=engine)
-
-    print(f"number of records in db: {records['count'][0]}")
+    write_df_in_batches(result, "APPLICATION_WITH_BRANCHES_DIMENSION", 50000)
 
 
 
@@ -158,23 +143,11 @@ def write_applications_without_branches_to_dw(bqdf):
     result = result.drop(["application_in_trash", "project_in_trash", ])
 
     print(result.columns)
-    print(result.head(5)) 
+    print(result.head(5))
 
-    mysql_uri = get_connection_string()
-    engine = create_engine(mysql_uri)
+    write_df_in_batches(result, "APPLICATION_DIMENSION", 50000)
 
-    result.write_database(
-          table_name="APPLICATION_DIMENSION",
-          connection=engine,
-          if_table_exists="append"
-
-    )  
-
-    print(f"number of records in result: {result.shape[0]}")
-
-    records = pl.read_database("SELECT count(*) as count FROM APPLICATION_DIMENSION", connection=engine)
-
-    print(f"number of records in db: {records['count'][0]}")
+    
 
 
 
@@ -184,21 +157,17 @@ def write_applications_without_branches_to_dw(bqdf):
 
 
 def read_customer_dim_from_dw():
-
     mysql_uri = get_connection_string()
     engine = create_engine(mysql_uri)
-
-    customers = pl.read_database("SELECT * FROM CUSTOMER_DIMENSION", connection=engine)
-
+    customers = pl.read_database("SELECT ID as CID, ORGANIZATION_ID FROM CUSTOMER_DIMENSION", connection=engine)
     print(f"number of customers in dw: {customers.shape[0]}")
-
     return customers
 
 
 def read_application_dim_from_dw():
     mysql_uri = get_connection_string()
     engine = create_engine(mysql_uri)
-    applications = pl.read_database("SELECT * FROM APPLICATION_DIMENSION", connection=engine)
+    applications = pl.read_database("SELECT ID as AID, ORGANIZATION_ID, APPLICATION_ID, PROJECT_ID FROM APPLICATION_DIMENSION", connection=engine)
     print(f"number of applications in dw: {applications.shape[0]}")
     return applications
 
@@ -210,8 +179,7 @@ def write_scans_to_dw():
     applications = read_application_dim_from_dw()
     print(f"application columns: {applications.columns}")
     scans = read_scans_from_bq()
-    print(f"scans columns: {scans.columns}")
-     
+    print(f"scans columns: {scans.columns}")     
     result = scans.join(customers,  on="ORGANIZATION_ID", how="inner").join(applications, on=["ORGANIZATION_ID","APPLICATION_ID","PROJECT_ID"], how="inner")
     print(f"result columns: {result.columns}")
     print(result.head(5))
@@ -221,22 +189,16 @@ def write_scans_to_dw():
     print(f"scans_to_write columns: {scans_to_write.columns}")
     print(f"writing scans to dw: {scans_to_write.shape[0]}")
 
-    mysql_uri = get_connection_string()
-    engine = create_engine(mysql_uri)
-
-    scans_to_write.write_database(
-          table_name="SCAN_FACT",
-          connection=engine,
-          if_table_exists="append"
-    )  
+    write_df_in_batches(scans_to_write, "SCAN_FACT", 20000)
 
 
-def map_scans_to_scans_fact(scans):
-     
+
+
+def map_scans_to_scans_fact(scans):  
     result = scans.select(
                     pl.col("TEST_ID"),
-                    pl.col("ID").alias("CUSTOMER_DIM_ID"),
-                    pl.col("ID_right").alias("APPLICATION_DIM_ID"),
+                    pl.col("CID").alias("CUSTOMER_DIM_ID"),
+                    pl.col("AID").alias("APPLICATION_DIM_ID"),
                     pl.col("ORGANIZATION_ID"),
                     pl.col("APPLICATION_ID"),
                     pl.col("PROJECT_ID"),
@@ -244,39 +206,80 @@ def map_scans_to_scans_fact(scans):
                     pl.col("ENTITLEMENT_ID"),
                     pl.col("SUBSCRIPTION_ID"),
                     pl.col("CATALOG_ID"),
-                    pl.col("TEST_SHORT_ID").str.slice(0,length=7).alias("TEST_SHORT_ID"),
+                    pl.col("TEST_SHORT_ID").str.slice(0, length=7).alias("TEST_SHORT_ID"),
                     pl.col("STREAM_ID"),
                     pl.col("SCAN_ID"),
                     pl.col("SCAN_MODE"),
                     pl.col("TEST_MODE"),
                     pl.col("TOOL_NAME"),
                     pl.col("ASSESSMENT_TYPE"),
-                    pl.col("WORKFLOW_TYPE"),
+                    pl.col("WORKFLOW_TYPE").fill_null("NOT AVAILABLE").alias("WORKFLOW_TYPE"),
                     pl.col("SCAN_STATE"),
                     pl.col("TRIAGE"),
                     pl.col("IS_DEFAULT_BRANCH"),
                     pl.col("IS_DELETED"),
                     pl.col("START_DATE"),
-                    pl.col("CREATED_AT"),
-                    pl.col("UPDATED_AT")
+                    pl.col("CREATED_DATE").alias("CREATED_AT"),
+                    pl.col("UPDATED_DATE").alias("UPDATED_AT")
 
               )
-     
     result = result.with_columns([
         pl.lit(datetime.now()).alias("CREATE_DATETIME"),
         pl.lit(datetime.now()).alias("UPDATE_DATETIME")
     ])
 
-#     Drop columns that are not needed in the database
-#     result = result.drop(['ID', 'CUSTOMER_NAME', 'TENANT_SHORT_ID', 
-#                           'STATE', 'IS_DELETED', 'CREATED_AT', 'UPDATED_AT', 
-#                            'CREATE_DATETIME', 'UPDATE_DATETIME', 
-#                           'ID_right', 'APPLICATION_NAME', 
-#                           'APPLICATION_DESCRIPTION', 'IS_APPLICATION_DELETED', 'APPLICATION_CREATED_AT',
-#                            'APPLICATION_UPDATED_AT', 'PROJECT_NAME', 'PROJECT_DESCRIPTION', 'IS_PROJECT_DELETED',
-#                            'PROJECT_CREATED_AT', 'PROJECT_UPDATED_AT', 'PROJECT_STATE', 'PROJECT_ENTRY_POINT_URL',
-#                            'CREATE_DATETIME_right', 'UPDATE_DATETIME_right'])
     print("after mapping columns")
     print(result.head(5))
     return result
+
+
+def write_df_in_batches(result, table_name, batch_size):
+
+    mysql_uri = get_connection_string()
+    engine = create_engine(mysql_uri)
+
+
+    if result.shape[0] <= batch_size:
+        result.write_database(
+            table_name=table_name,
+            connection=engine,
+            if_table_exists="append"
+        )
+
+        print(f"number of records written: {result.shape[0]}")
+        return
+
+    num_batches = (result.shape[0] // batch_size)
+
+    for batch_num in range(num_batches):
+        start_idx = batch_num * batch_size
+        end_idx = start_idx + batch_size
+        batch = result[start_idx:end_idx]
+
+        batch.write_database(
+            table_name=table_name,
+            connection=engine,
+            if_table_exists="append"
+        )
+
+        print(f"number of records written in batch {batch_num}:{batch.shape[0]}")
+
+
+    if result.shape[0] % batch_size != 0:
+        start_idx = num_batches * batch_size
+        batch = result[start_idx:]
+
+        batch.write_database(
+            table_name=table_name,
+            connection=engine,
+            if_table_exists="append"
+        )
+
+        print(f"number of records written in batch {num_batches}: {batch.shape[0]}")
+
+    print(f"number of records in result: {result.shape[0]}")
+
+    records = pl.read_database(f"SELECT count(*) as count FROM {table_name}", connection=engine)
+
+    print(f"number of records in db: {records['count'][0]}")
 
