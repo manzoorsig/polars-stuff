@@ -1,0 +1,43 @@
+apiVersion: memsql.com/v1alpha1
+kind: MemsqlCluster
+metadata:
+  name: sdb-cluster
+spec:
+  license: BGEyMDBkMTM2NzQxYzQ2OTQ5MDA0ZWY0ZmI1ODk3OTQxAAAAAAAAAAAEAAAAAAAAACgwNQIYEIdDmJNAj0nDAn9NQDebneWGKGF56WRcAhkAz3hNfwAqWUhmld9rFkzBcamqyPQMxVJiAA==
+  adminHashedPassword: "*9177CC8207174BDBB5ED66B2140C75171283F15D"
+  nodeImage:
+    repository: docker.io/singlestore/node
+    tag: alma-8.9.3-bfa36a984a
+
+  redundancyLevel: 2
+
+  serviceSpec:
+    objectMetaOverrides:
+      labels:
+        custom: label
+      annotations:
+        custom: annotations
+
+  aggregatorSpec:
+    count: 2
+    height: 0.5
+    storageGB: 200
+    storageClass: standard
+
+    objectMetaOverrides:
+      annotations:
+        optional: annotation
+      labels:
+        optional: label
+
+  leafSpec:
+    count: 2
+    height: 0.5
+    storageGB: 200
+    storageClass: standard
+
+    objectMetaOverrides:
+      annotations:
+        optional: annotation
+      labels:
+        optional: label
