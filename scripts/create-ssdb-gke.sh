@@ -81,35 +81,38 @@ echo -e "\nService account email address is: $GKE_SERVICE_ACCOUNT_EMAIL\n"
 # echo -e "\n NAT routers created\n.........."
 # gcloud compute routers list
 
+# Get the public IP address
+PUBLIC_IP=$(dig +short myip.opendns.com @resolver1.opendns.com)
+echo -e "\nPublic IP address is: $PUBLIC_IP\n"
 
 #gcloud container clusters create ssdb-poc-cluster \
-#    --cluster-version "1.30.6-gke.1125000" \
-#    --release-channel "regular"  \
-#    --image-type "UBUNTU_CONTAINERD" \
-#    --machine-type "n2-standard-8" \
-#    --disk-type "pd-ssd" \
-#    --disk-size "256" \
-#    --metadata disable-legacy-endpoints=true \
-#    --region "us-west1" \
-#    --num-nodes "4" \
-#    --enable-dns-access \
-#    --enable-ip-access \
-#    --enable-master-authorized-networks \
-#    --master-authorized-networks 136.226.68.202/32,216.208.191.234/32\
-#    --network ssdb-poc-network \
-#    --subnetwork ssdb-poc-subnet \
-#    --cluster-secondary-range-name my-pods \
-#    --services-secondary-range-name my-services \
-#    --logging=SYSTEM,WORKLOAD \
-#    --monitoring=SYSTEM,STORAGE,POD,DEPLOYMENT,STATEFULSET,DAEMONSET,HPA,CADVISOR,KUBELET \
-#    --enable-private-nodes \
-#    --enable-ip-alias \
-#    --no-enable-basic-auth \
-#    --no-issue-client-certificate \
-#    --node-labels=app=default-init \
-#    --node-locations=us-west1-a \
-#    --region=us-west1 \
-#    --service-account="$GKE_SERVICE_ACCOUNT_EMAIL"
+#  --cluster-version "1.30.6-gke.1125000" \
+#  --release-channel "regular"  \
+#  --image-type "UBUNTU_CONTAINERD" \
+#  --machine-type "n2-standard-16" \
+#  --disk-type "pd-ssd" \
+#  --disk-size "256" \
+#  --metadata disable-legacy-endpoints=true \
+#  --region "us-west1" \
+#  --num-nodes "4" \
+#  --enable-dns-access \
+#  --enable-ip-access \
+#  --enable-master-authorized-networks \
+#  --master-authorized-networks $PUBLIC_IP/32 \
+#  --network ssdb-poc-network \
+#  --subnetwork ssdb-poc-subnet \
+#  --cluster-secondary-range-name my-pods \
+#  --services-secondary-range-name my-services \
+#  --logging=SYSTEM,WORKLOAD \
+#  --monitoring=SYSTEM,STORAGE,POD,DEPLOYMENT,STATEFULSET,DAEMONSET,HPA,CADVISOR,KUBELET \
+#  --enable-private-nodes \
+#  --enable-ip-alias \
+#  --no-enable-basic-auth \
+#  --no-issue-client-certificate \
+#  --node-labels=app=default-init \
+#  --node-locations=us-west1-a \
+#  --region=us-west1 \
+#  --service-account="$GKE_SERVICE_ACCOUNT_EMAIL"
 
 
 
@@ -126,6 +129,7 @@ echo -e "\nService account email address is: $GKE_SERVICE_ACCOUNT_EMAIL\n"
 #                      --binauthz-evaluation-mode=DISABLED --enable-managed-prometheus --enable-shielded-nodes
 
 sleep 10
+
 
 # get container cluster credentials
 echo -e "\nGetting container cluster credentials\n"
@@ -184,10 +188,10 @@ check_sdb_operator_pod() {
   # Check if the pod status is "Running"
   if [ "$POD_STATUS" == "Running" ]; then
     echo "sdb-operator pod is running."
-    return 1
+    return 0
   else
     echo "sdb-operator pod is not running. Current status: $POD_STATUS"
-    return 0
+    return 1
   fi
 }
 
@@ -196,13 +200,18 @@ sleep 10
 # check sd-operator pod is running
 echo -e "\nChecking if sdb-operator pod is running\n"
 check_sdb_operator_pod
-if [ $? -eq 1 ]; then
+if [ $? -eq 0 ]; then
     echo -e "\nCreating ssdb cluster\n"
     kubectl create -f k8s/sdb-cluster.yaml
 else
     echo "Error: sdb-operator pod is not running. Cannot create ssdb cluster."
 fi
 
+sleep 30
 #get pods
 echo -e "\nGetting pods\n"
 kubectl get pods 
+
+#get pods
+echo -e "\nGetting services\n"
+kubectl get services 
